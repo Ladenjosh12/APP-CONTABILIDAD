@@ -130,6 +130,15 @@ async def exportar_excel(anio: Optional[int] = None):
     )
 
 
+@router.delete("/{invoice_id}")
+async def eliminar_factura(invoice_id: int):
+    """Elimina una factura guardada (por si se registró algo por error)."""
+    eliminado = excel_manager.eliminar_factura(invoice_id)
+    if not eliminado:
+        raise HTTPException(404, "Factura no encontrada")
+    return {"status": "eliminada", "id": invoice_id}
+
+
 @router.get("/{invoice_id}/pdf")
 async def obtener_pdf(invoice_id: int):
     """Sirve el PDF original de una factura a partir de su id."""

@@ -65,6 +65,15 @@ def listar_filas(anio: int, trimestre: str) -> List[Dict]:
     return filas
 
 
+def eliminar_factura(invoice_id: int) -> bool:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM invoices WHERE id = %s", (invoice_id,))
+            eliminado = cur.rowcount > 0
+        conn.commit()
+    return eliminado
+
+
 def obtener_pdf(invoice_id: int) -> Optional[Dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:
