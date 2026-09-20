@@ -1,10 +1,8 @@
 import axios from "axios";
 
-// URL pública del backend desplegado en Render (HTTPS). Se actualiza una vez
-// que el servicio esté desplegado — mientras tanto puedes apuntar temporalmente
-// a tu IP local para probar contra el backend corriendo en tu PC, ej.
-// "http://192.168.1.18:8000" ("localhost" no funciona desde un dispositivo físico).
-export const API_BASE_URL = "https://contabilidad-backend.onrender.com";
+// URL pública del backend desplegado en Render. Verificada en producción:
+// extracción OCR, guardado, listado, PDF y exportación a Excel funcionando.
+export const API_BASE_URL = "https://contabilidad-backend-1sgr.onrender.com";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

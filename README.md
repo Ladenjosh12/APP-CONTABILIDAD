@@ -1,14 +1,16 @@
 # Contabilidad de facturas — captura, OCR y Excel por trimestres
 
 App de contabilidad que permite fotografiar o subir una factura desde el
-móvil, extraer automáticamente sus campos fiscales mediante OCR, guardar la
-imagen original como PDF, y registrar cada documento como una fila en un
-Excel único organizado por pestañas de trimestre (`{año}-T{n}`).
+móvil, extraer automáticamente sus campos fiscales mediante OCR, guardar el
+PDF original y registrar cada documento en una base de datos organizada por
+trimestre, con exportación a Excel bajo demanda.
+
+**Backend en producción:** https://contabilidad-backend-1sgr.onrender.com
 
 ## Arquitectura
 
 ```
-[App móvil RN/Expo] --(foto)--> POST /invoices/extract --> [FastAPI backend]
+[App móvil RN/Expo] --(foto)--> POST /invoices/extract --> [FastAPI backend, Render]
                                                                  |
                                                     preprocesado (OpenCV/PIL)
                                                                  |
@@ -21,55 +23,70 @@ Excel único organizado por pestañas de trimestre (`{año}-T{n}`).
                                         POST /invoices (JSON final + imagen)
                                                                  |
                                           imagen -> PDF (img2pdf)
-                                          guarda en data/facturas/{año}/{trimestre}/
-                                          añade fila en hoja "{año}-T{n}" de Contabilidad.xlsx
+                                          guarda fila + PDF (bytea) en Postgres (Render)
                                                                  |
-[Historial / Detalle] <--- GET /invoices?anio=&trimestre=   (lee el Excel)
-                       <--- GET /invoices/pdf/{ruta}         (sirve el PDF)
+[Historial / Detalle] <--- GET /invoices?anio=&trimestre=      (consulta Postgres)
+                       <--- GET /invoices/{id}/pdf               (sirve el PDF)
+                       <--- GET /invoices/export/excel?anio=     (genera el .xlsx al vuelo)
 ```
 
-- **Backend**: Python + FastAPI (`backend/`)
-- **OCR**: Tesseract vía `pytesseract` (gratuito, local, sin dependencia de API externa)
+- **Backend**: Python + FastAPI, desplegado en Render (Docker) — `backend/`
+- **Base de datos**: Postgres (Render, plan gratuito) — una fila por factura, PDF incluido como dato binario
+- **OCR**: Tesseract vía `pytesseract` (gratuito, sin dependencia de una API de pago)
 - **Extracción de campos**: reglas/regex especializadas en facturas españolas (NIF/CIF, fechas, importes con IVA)
-- **App móvil**: React Native + Expo (`mobile/`)
-- **Persistencia**: PDFs individuales por factura + un único libro Excel continuo (`openpyxl`)
+- **App móvil**: React Native + Expo — `mobile/`
+- **Excel**: no es un archivo fijo en disco; se genera al vuelo desde la base de datos cada vez que se pide (`GET /invoices/export/excel`), con una pestaña por `{año}-T{n}`
 
-## Puesta en marcha rápida
+## Por qué la base de datos en vez de un archivo Excel fijo
 
-1. **Backend** — ver [`backend/README.md`](backend/README.md) (instalar Tesseract, crear venv, `pip install -r requirements.txt`, `uvicorn app.main:app --reload --host 0.0.0.0`)
-2. **App móvil** — ver [`mobile/README.md`](mobile/README.md) (`npm install`, configurar la IP del backend en `src/api/client.ts`, `npx expo start`)
+La primera versión guardaba un único `.xlsx` en disco. Al desplegar en la nube
+(para que la app funcione desde cualquier móvil, no solo en la red local) esto
+dejó de ser viable: los servidores gratuitos tienen almacenamiento efímero, y
+un archivo en disco se perdería en cada reinicio. Por eso los datos ahora
+viven en Postgres (persistente) y el Excel se genera bajo demanda a partir de
+ahí — el resultado es el mismo (una pestaña por trimestre, todas las
+columnas pedidas), solo cambia cómo se guarda internamente.
+
+## Puesta en marcha
+
+1. **Backend** — ya está desplegado y funcionando en Render (ver URL arriba).
+   Para desplegar tu propia copia o desarrollar en local, ver [`backend/README.md`](backend/README.md).
+2. **App móvil** — el APK ya compilado apunta al backend en producción. Para
+   generar uno nuevo o modificar la app, ver [`mobile/README.md`](mobile/README.md).
 
 ## Por qué Tesseract (gratuito) en vez de una IA de pago
 
-Se eligió Tesseract por ser gratuito y funcionar localmente, sin coste por
-imagen ni dependencia de una API externa. Como contrapartida, es menos
-robusto que un modelo multimodal de pago (Claude/GPT-4 Vision) ante facturas
-con diseños muy variados o fotos de baja calidad. Por eso el flujo de la app
-**siempre** pasa por una pantalla de revisión editable antes de guardar,
-donde los campos que el OCR no pudo detectar con confianza se resaltan en
-rojo para que el usuario los complete a mano. Si en el futuro se necesita
-más precisión automática, basta con sustituir `backend/app/ocr/engine.py` y
-`backend/app/ocr/extraction.py` por una llamada a un modelo multimodal, sin
-tocar el resto de la aplicación.
+Se eligió Tesseract por ser gratuito, sin coste por imagen ni dependencia de
+una API externa de pago. Como contrapartida, es menos robusto que un modelo
+multimodal (Claude/GPT-4 Vision) ante facturas con diseños muy variados o
+fotos de baja calidad. Por eso el flujo de la app **siempre** pasa por una
+pantalla de revisión editable antes de guardar, donde los campos que el OCR
+no pudo detectar con confianza se resaltan en rojo. Si en el futuro se
+necesita más precisión automática, basta con sustituir
+`backend/app/ocr/engine.py` y `backend/app/ocr/extraction.py` por una llamada
+a un modelo multimodal, sin tocar el resto de la aplicación.
 
 ## Verificación realizada
 
-El backend se instaló y probó de extremo a extremo en este entorno: se
-generó una factura sintética en español, se envió a `POST /invoices/extract`
-(OCR + extracción, los 8 campos se detectaron correctamente), se confirmó
-con `POST /invoices` y se comprobó que el PDF se creó en
-`data/facturas/2026/T1/...` y que la fila apareció correctamente en la
-pestaña `2026-T1` de `Contabilidad.xlsx`. También se comprobó que el
-servidor real (`uvicorn`) arranca sin errores. Ver
-`backend/scripts/probar_api.py` para repetir esta prueba.
+- Backend probado de extremo a extremo **contra el despliegue real en Render**:
+  extracción OCR (8/8 campos detectados en la factura de prueba), guardado en
+  Postgres, listado, descarga del PDF y exportación a Excel — todo funcionando
+  en producción (`backend/scripts/probar_produccion.ps1`).
+- App móvil compilada como **APK release real** (JS empaquetado dentro, sin
+  depender de Metro ni de ningún PC encendido) y verificada por el usuario
+  instalándola en su propio teléfono.
+- La factura de prueba usada para verificar se eliminó de la base de datos de
+  producción antes de la entrega (vía `DELETE /invoices/{id}`).
 
-La app móvil (React Native/Expo) **no** se ha podido ejecutar en este
-entorno por no haber un emulador ni un dispositivo conectado — el código
-está completo y listo para probarse con `npx expo start` + Expo Go siguiendo
-[`mobile/README.md`](mobile/README.md).
+## Límites del plan gratuito (a tener en cuenta)
 
-## Limitaciones conocidas de esta primera versión
-
-- El backend corre en local (tu máquina o red privada); no incluye despliegue en la nube.
-- El libro Excel es un único archivo en disco protegido con un lock de archivo — pensado para uso de una sola persona/pequeño negocio, no para escritura concurrente a gran escala.
-- El OCR gratuito (Tesseract) puede fallar en facturas con diseños poco habituales, letra manuscrita o fotos de baja calidad; por eso la revisión manual en la app es obligatoria antes de guardar.
+- El servicio web de Render "se duerme" tras 15 min sin tráfico; la primera
+  petición tras dormirse tarda ~1 minuto en responder. Normal, no es un fallo.
+- **La base de datos Postgres gratuita de Render expira 30 días después de
+  creada** (con 14 días de gracia antes de borrarse). Para no perder el
+  histórico de facturas, súbela a un plan de pago (~6-7 $/mes) desde el
+  Dashboard de Render antes de que expire — Render avisa por email con
+  antelación.
+- El OCR gratuito puede fallar en facturas con diseños poco habituales o
+  fotos de baja calidad; por eso la revisión manual en la app es obligatoria
+  antes de guardar.
