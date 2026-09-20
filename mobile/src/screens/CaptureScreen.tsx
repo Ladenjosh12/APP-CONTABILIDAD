@@ -30,7 +30,11 @@ export default function CaptureScreen({ navigation }: Props) {
       Alert.alert("Permiso necesario", "Necesitamos acceso a la cámara para fotografiar la factura.");
       return;
     }
-    const resultado = await ImagePicker.launchCameraAsync({ quality: 0.9 });
+    // Calidad reducida a propósito: para leer texto con OCR no hace falta
+    // una foto a máxima calidad, y un archivo más pequeño sube mucho más
+    // rápido en datos móviles — clave en un servidor gratuito con timeouts
+    // ajustados.
+    const resultado = await ImagePicker.launchCameraAsync({ quality: 0.5 });
     if (!resultado.canceled) {
       setImageUri(resultado.assets[0].uri);
     }
@@ -42,13 +46,13 @@ export default function CaptureScreen({ navigation }: Props) {
       Alert.alert("Permiso necesario", "Necesitamos acceso a tus fotos para subir la factura.");
       return;
     }
-    const resultado = await ImagePicker.launchImageLibraryAsync({ quality: 0.9 });
+    const resultado = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
     if (!resultado.canceled) {
       setImageUri(resultado.assets[0].uri);
     }
   }
 
-  async function esperarServidorDespierto(maxEsperaMs = 90000) {
+  async function esperarServidorDespierto(maxEsperaMs = 120000) {
     // El sistema de subida de archivos (uploadAsync) usa internamente un
     // cliente con un timeout FIJO de 60s que no se puede configurar desde
     // JS. El servidor gratuito puede tardar casi eso solo en despertar, así
@@ -62,6 +66,16 @@ export default function CaptureScreen({ navigation }: Props) {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function subirFactura(tipoMime: string) {
+    return FileSystem.uploadAsync(`${API_BASE_URL}/invoices/extract`, imageUri!, {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: "archivo",
+      mimeType: tipoMime,
+      parameters: {},
+    });
   }
 
   async function procesarFactura() {
@@ -82,14 +96,17 @@ export default function CaptureScreen({ navigation }: Props) {
       // Subida nativa de FileSystem en vez de axios+FormData: en algunos
       // dispositivos/Android, subir un archivo local con fetch/axios da un
       // "Network Error" inmediato sin llegar a tocar el servidor. uploadAsync
-      // usa el subsistema nativo de subida de archivos y es mucho más fiable.
-      const resultado = await FileSystem.uploadAsync(`${API_BASE_URL}/invoices/extract`, imageUri, {
-        httpMethod: "POST",
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: "archivo",
-        mimeType: tipoMime,
-        parameters: {},
-      });
+      // usa el subsistema nativo de subida de archivos y es mucho más fiable,
+      // aunque tiene un timeout fijo de 60s. Si aun así falla (p. ej. el
+      // servidor tarda más de la cuenta en la práctica), reintentamos una
+      // vez: para entonces el servidor ya estará despierto seguro.
+      let resultado;
+      try {
+        resultado = await subirFactura(tipoMime);
+      } catch (primerError) {
+        console.warn("Primer intento de subida falló, reintentando una vez:", primerError);
+        resultado = await subirFactura(tipoMime);
+      }
 
       if (resultado.status < 200 || resultado.status >= 300) {
         throw new Error(`HTTP ${resultado.status}: ${resultado.body}`);
