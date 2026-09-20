@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+pydantic==2.9.2
+pytesseract==0.3.13
+pillow==10.4.0
+opencv-python-headless==4.10.0.84
+img2pdf==0.5.1
+openpyxl==3.1.5
+python-dateutil==2.9.0.post0
+psycopg2-binary==2.9.9

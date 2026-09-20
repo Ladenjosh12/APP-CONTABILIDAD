@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Contabilidad Facturas",
+    "slug": "contabilidad-facturas-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.contabilidad.facturasapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Necesitamos acceso a la cámara para fotografiar facturas.",
+        "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tus fotos para subir facturas ya escaneadas."
+      }
+    },
+    "android": {
+      "package": "com.contabilidad.facturasapp",
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Necesitamos acceso a la cámara para fotografiar facturas."
+        }
+      ]
+    ]
+  }
+}

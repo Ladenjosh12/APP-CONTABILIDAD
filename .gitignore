@@ -1,0 +1,24 @@
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/data/
+backend/.pytest_cache/
+backend/scripts/factura_prueba.png
+backend/tessdata/
+
+# Mobile — el SDK de Android, node_modules y los builds generados no van a git
+# (Render solo necesita backend/ + render.yaml; el proyecto móvil se compila
+# aparte en local, ver mobile/README.md)
+mobile/node_modules/
+mobile/android-sdk/
+mobile/android/
+mobile/.expo/
+mobile/dist/
+mobile/build-output/
+mobile/npm-debug.*
+mobile/gradle-build*.log
+
+# General
+.DS_Store
+*.apk
