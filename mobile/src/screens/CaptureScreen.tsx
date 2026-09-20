@@ -72,11 +72,19 @@ export default function CaptureScreen({ navigation }: Props) {
       });
 
       navigation.navigate("Review", { draft: respuesta.data, imageUri });
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      const detalle = [
+        error?.code ? `código: ${error.code}` : null,
+        error?.message ? `mensaje: ${error.message}` : null,
+        error?.response?.status ? `HTTP ${error.response.status}` : null,
+        error?.response?.data ? `datos: ${JSON.stringify(error.response.data)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
       Alert.alert(
         "Error al procesar",
-        "No se pudo conectar con el servidor o extraer los datos. Comprueba tu conexión a internet e inténtalo de nuevo en unos segundos."
+        `No se pudo conectar con el servidor o extraer los datos.\n\n${detalle || "Sin detalles adicionales."}`
       );
     } finally {
       if (avisoTimeout.current) clearTimeout(avisoTimeout.current);
