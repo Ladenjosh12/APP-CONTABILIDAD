@@ -10,9 +10,10 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/AppNavigator";
-import { apiClient } from "../api/client";
+import { API_BASE_URL } from "../api/client";
 import type { InvoiceDraft } from "../types/invoice";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Capture">;
@@ -56,35 +57,33 @@ export default function CaptureScreen({ navigation }: Props) {
     avisoTimeout.current = setTimeout(() => setDespertando(true), 6000);
 
     try {
-      const formData = new FormData();
       const nombreArchivo = imageUri.split("/").pop() ?? "factura.jpg";
       const extension = nombreArchivo.split(".").pop()?.toLowerCase();
       const tipoMime = extension === "png" ? "image/png" : "image/jpeg";
 
-      formData.append("archivo", {
-        uri: imageUri,
-        name: nombreArchivo,
-        type: tipoMime,
-      } as unknown as Blob);
-
-      const respuesta = await apiClient.post<InvoiceDraft>("/invoices/extract", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+      // Subida nativa de FileSystem en vez de axios+FormData: en algunos
+      // dispositivos/Android, subir un archivo local con fetch/axios da un
+      // "Network Error" inmediato sin llegar a tocar el servidor. uploadAsync
+      // usa el subsistema nativo de subida de archivos y es mucho más fiable.
+      const resultado = await FileSystem.uploadAsync(`${API_BASE_URL}/invoices/extract`, imageUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "archivo",
+        mimeType: tipoMime,
+        parameters: {},
       });
 
-      navigation.navigate("Review", { draft: respuesta.data, imageUri });
+      if (resultado.status < 200 || resultado.status >= 300) {
+        throw new Error(`HTTP ${resultado.status}: ${resultado.body}`);
+      }
+
+      const draft: InvoiceDraft = JSON.parse(resultado.body);
+      navigation.navigate("Review", { draft, imageUri });
     } catch (error: any) {
       console.error(error);
-      const detalle = [
-        error?.code ? `código: ${error.code}` : null,
-        error?.message ? `mensaje: ${error.message}` : null,
-        error?.response?.status ? `HTTP ${error.response.status}` : null,
-        error?.response?.data ? `datos: ${JSON.stringify(error.response.data)}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
       Alert.alert(
         "Error al procesar",
-        `No se pudo conectar con el servidor o extraer los datos.\n\n${detalle || "Sin detalles adicionales."}`
+        `No se pudo conectar con el servidor o extraer los datos.\n\n${error?.message ?? "Sin detalles adicionales."}`
       );
     } finally {
       if (avisoTimeout.current) clearTimeout(avisoTimeout.current);
