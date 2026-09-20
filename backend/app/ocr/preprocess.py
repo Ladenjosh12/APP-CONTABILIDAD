@@ -4,12 +4,11 @@ from PIL import Image, ImageOps
 
 
 # Las fotos de móvil actuales (12+ MP) son muchísimo más grandes de lo que
-# Tesseract necesita para leer bien el texto, y operaciones como el
-# denoising son muy costosas en píxeles: sin este límite, una foto de
-# 3024x4032 tarda ~90 s en preprocesarse en un servidor con poca CPU/RAM
-# (como el plan gratuito de Render). 2000 px de lado mayor es de sobra
-# para OCR de una factura y reduce ese tiempo a unos pocos segundos.
-MAX_DIMENSION_ENTRADA = 2000
+# Tesseract necesita para leer bien el texto, y las operaciones de OpenCV son
+# muy costosas en píxeles: sin este límite, una foto de 3024x4032 tarda ~90 s
+# en preprocesarse en un servidor con poca CPU/RAM (como el plan gratuito de
+# Render). 1500 px de lado mayor es de sobra para OCR de una factura.
+MAX_DIMENSION_ENTRADA = 1500
 
 
 def preprocess_image(image: Image.Image) -> Image.Image:
@@ -25,7 +24,10 @@ def preprocess_image(image: Image.Image) -> Image.Image:
         escala = MAX_DIMENSION_ENTRADA / max_dim_entrada
         gray = cv2.resize(gray, None, fx=escala, fy=escala, interpolation=cv2.INTER_AREA)
 
-    gray = cv2.fastNlMeansDenoising(gray, h=10)
+    # fastNlMeansDenoising da mejor calidad pero es muy lento en CPUs
+    # débiles; un desenfoque de mediana es mucho más barato y ya quita
+    # suficiente ruido de una foto normal para que Tesseract lea bien.
+    gray = cv2.medianBlur(gray, 3)
     gray = _deskew(gray)
 
     binary = cv2.adaptiveThreshold(
