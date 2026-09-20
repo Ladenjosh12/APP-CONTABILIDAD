@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,8 @@ type Props = NativeStackScreenProps<RootStackParamList, "Capture">;
 export default function CaptureScreen({ navigation }: Props) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [despertando, setDespertando] = useState(false);
+  const avisoTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function tomarFoto() {
     const permiso = await ImagePicker.requestCameraPermissionsAsync();
@@ -48,6 +50,11 @@ export default function CaptureScreen({ navigation }: Props) {
   async function procesarFactura() {
     if (!imageUri) return;
     setLoading(true);
+    setDespertando(false);
+    // El servidor gratuito puede "dormirse" tras estar inactivo; si tarda más
+    // de lo normal, avisamos para que el usuario no piense que se ha colgado.
+    avisoTimeout.current = setTimeout(() => setDespertando(true), 6000);
+
     try {
       const formData = new FormData();
       const nombreArchivo = imageUri.split("/").pop() ?? "factura.jpg";
@@ -69,10 +76,12 @@ export default function CaptureScreen({ navigation }: Props) {
       console.error(error);
       Alert.alert(
         "Error al procesar",
-        "No se pudo conectar con el servidor o extraer los datos. Comprueba que el backend esté encendido y que la IP en src/api/client.ts sea correcta."
+        "No se pudo conectar con el servidor o extraer los datos. Comprueba tu conexión a internet e inténtalo de nuevo en unos segundos."
       );
     } finally {
+      if (avisoTimeout.current) clearTimeout(avisoTimeout.current);
       setLoading(false);
+      setDespertando(false);
     }
   }
 
@@ -106,6 +115,12 @@ export default function CaptureScreen({ navigation }: Props) {
           <Text style={styles.primaryButtonText}>Procesar factura</Text>
         )}
       </TouchableOpacity>
+
+      {despertando && (
+        <Text style={styles.avisoTexto}>
+          El servidor estaba en reposo y está despertando, puede tardar hasta un minuto la primera vez...
+        </Text>
+      )}
     </SafeAreaView>
   );
 }
@@ -136,4 +151,5 @@ const styles = StyleSheet.create({
   primaryButton: { backgroundColor: "#2563eb", paddingVertical: 16, borderRadius: 12, alignItems: "center" },
   disabledButton: { backgroundColor: "#93c5fd" },
   primaryButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
+  avisoTexto: { textAlign: "center", color: "#6b7280", fontSize: 13, marginTop: 12 },
 });
