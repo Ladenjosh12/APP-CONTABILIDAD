@@ -48,15 +48,33 @@ export default function CaptureScreen({ navigation }: Props) {
     }
   }
 
+  async function esperarServidorDespierto(maxEsperaMs = 90000) {
+    // El sistema de subida de archivos (uploadAsync) usa internamente un
+    // cliente con un timeout FIJO de 60s que no se puede configurar desde
+    // JS. El servidor gratuito puede tardar casi eso solo en despertar, así
+    // que primero lo "despertamos" con una petición normal (fetch), que sí
+    // podemos esperar más tiempo, y solo subimos la foto cuando ya responde.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), maxEsperaMs);
+    try {
+      const resp = await fetch(`${API_BASE_URL}/health`, { signal: controller.signal });
+      if (!resp.ok) throw new Error(`El servidor respondió con un error (${resp.status})`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function procesarFactura() {
     if (!imageUri) return;
     setLoading(true);
     setDespertando(false);
     // El servidor gratuito puede "dormirse" tras estar inactivo; si tarda más
     // de lo normal, avisamos para que el usuario no piense que se ha colgado.
-    avisoTimeout.current = setTimeout(() => setDespertando(true), 6000);
+    avisoTimeout.current = setTimeout(() => setDespertando(true), 4000);
 
     try {
+      await esperarServidorDespierto();
+
       const nombreArchivo = imageUri.split("/").pop() ?? "factura.jpg";
       const extension = nombreArchivo.split(".").pop()?.toLowerCase();
       const tipoMime = extension === "png" ? "image/png" : "image/jpeg";
